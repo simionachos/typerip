@@ -1,6 +1,6 @@
 {
   "name": "TypeRip",
-  "description": "Adobe Fonts font family ripper and downloader",
+  "description": "Download font families and styles from Google Fonts and Adobe Fonts",
   "permissions": [],
   "capabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
     <meta charset="utf-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>TypeRip</title>
-    <meta name="description" content="Adobe Fonts font family ripper and downloader" />
-    <meta property="og:title" content="TypeRip" />
-    <meta property="og:description" content="Adobe Fonts font family ripper and downloader" />
+    <title>TypeRip - Baixar Fontes Adobe Fonts & Google Fonts</title>
+    <meta name="description" content="Baixe famílias e estilos de fontes completos do Google Fonts e Adobe Fonts em formato TTF/OTF instalável." />
+    <meta property="og:title" content="TypeRip - Baixar Fontes Adobe Fonts & Google Fonts" />
+    <meta property="og:description" content="Baixe famílias e estilos de fontes completos do Google Fonts e Adobe Fonts em formato TTF/OTF instalável." />
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,600&display=swap" rel="stylesheet"> 
     <link href="https://fonts.googleapis.com/css?family=Source+Code+Pro&display=swap" rel="stylesheet">
@@ -20,56 +20,203 @@
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
     <script src="js/typerip.js"></script>
     <link rel="icon" type="image/png" href="res/favicon.png">
+    <style>
+        .source-badge {
+            display: inline-block;
+            font-size: 1.2rem;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        .badge-google {
+            background-color: #E8F0FE;
+            color: #1967D2;
+            border: 1px solid #D2E3FC;
+        }
+        .badge-adobe {
+            background-color: #FCE8E6;
+            color: #C5221F;
+            border: 1px solid #FAD2CF;
+        }
+        .preset-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .preset-chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 16px;
+            font-size: 1.3rem;
+            color: #444;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            text-decoration: none;
+        }
+        .preset-chip:hover {
+            border-color: #005DFF;
+            color: #005DFF;
+            background: #f7faff;
+        }
+        .preset-chip .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+        .dot-google { background-color: #1967D2; }
+        .dot-adobe { background-color: #C5221F; }
+        .progress-bar-wrap {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background: #005DFF;
+            transition: width 0.2s ease;
+        }
+    </style>
 </head>
 <body>
     <div id="typeripvue">
         <header>
-            <div id="icon">Tr</div>
-            <input v-model="urlInput" v-on:keyup.enter="urlSubmitButtonPress" id="url_input" type="text" placeholder="Adobe Fonts font family URL" />
-            <div id="url_submit_button" v-on:click="urlSubmitButtonPress"><i class="icon ion-md-search"></i></div>
+            <div id="icon" style="cursor: pointer;" onclick="location.reload()" title="TypeRip Home">Tr</div>
+            <input 
+                v-model="urlInput" 
+                v-on:keyup.enter="urlSubmitButtonPress" 
+                id="url_input" 
+                type="text" 
+                placeholder="URL ou nome da fonte (Google Fonts ou Adobe Fonts, ex: Futura PT, Roboto, Acumin...)" 
+            />
+            <div id="url_submit_button" v-on:click="urlSubmitButtonPress" title="Buscar e rip fontes">
+                <i class="icon ion-md-search"></i>
+            </div>
         </header>
         <article>
             <div class="grid">
+                <!-- Informative & Quick Selection Header Bar -->
+                <div class="row" style="margin-bottom: 2rem;">
+                    <div class="column">
+                        <div style="background: #fafafa; border: 1px solid #eaeaea; border-radius: 6px; padding: 12px 18px;">
+                            <div style="font-size: 1.35rem; color: #666; margin-bottom: 6px;">
+                                <strong>Fontes Rápidas Suportadas:</strong> Clique em qualquer exemplo abaixo para carregar imediatamente:
+                            </div>
+                            <div class="preset-container">
+                                <span style="font-size: 1.25rem; font-weight: 600; color: #1967D2; align-self: center; margin-right: 2px;">Google:</span>
+                                <a class="preset-chip" v-on:click.prevent="quickLoad('Google Sans Flex')">
+                                    <span class="dot dot-google"></span>Google Sans Flex
+                                </a>
+                                <a class="preset-chip" v-on:click.prevent="quickLoad('Roboto')">
+                                    <span class="dot dot-google"></span>Roboto
+                                </a>
+                                <a class="preset-chip" v-on:click.prevent="quickLoad('Open Sans')">
+                                    <span class="dot dot-google"></span>Open Sans
+                                </a>
+                                <a class="preset-chip" v-on:click.prevent="quickLoad('https://fonts.google.com/?lang=pt_Latn&preview.script=Latn&preview.lang=pt_Latn')">
+                                    <span class="dot dot-google"></span>Catálogo Português (Latn)
+                                </a>
+
+                                <span style="font-size: 1.25rem; font-weight: 600; color: #C5221F; align-self: center; margin-left: 10px; margin-right: 2px;">Adobe:</span>
+                                <a class="preset-chip" v-on:click.prevent="quickLoad('https://fonts.adobe.com/fonts/futura-pt')">
+                                    <span class="dot dot-adobe"></span>Futura PT
+                                </a>
+                                <a class="preset-chip" v-on:click.prevent="quickLoad('https://fonts.adobe.com/fonts/acumin')">
+                                    <span class="dot dot-adobe"></span>Acumin Pro
+                                </a>
+                                <a class="preset-chip" v-on:click.prevent="quickLoad('https://fonts.adobe.com/fonts/proxima-nova')">
+                                    <span class="dot dot-adobe"></span>Proxima Nova
+                                </a>
+                                <a class="preset-chip" v-on:click.prevent="quickLoad('https://fonts.adobe.com/collections/the-tipoteca-series')">
+                                    <span class="dot dot-adobe"></span>The Tipoteca Series
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Message Alert Box / Loaded Family Box -->
                 <div v-if="message.visible" class="row">
                     <div class="column">
                         <div class="alertBox">
                             <template v-if="!fontIsActive">
                                 <div class="info_container">
                                     <h3>{{message.title}}</h3>
-                                    <p class="subtext" v-html="message.text"></p><br/>
+                                    <div class="subtext" v-html="message.text"></div>
                                 </div>
                             </template>
                             <template v-if="fontIsActive">
                                 <div class="info_container">
+                                    <div>
+                                        <span v-if="fontFamily.provider === 'adobe'" class="source-badge badge-adobe">Adobe Fonts</span>
+                                        <span v-else class="source-badge badge-google">Google Fonts</span>
+                                    </div>
                                     <h3>{{fontFamily.name}}</h3>
-                                    <p class="subtext" v-if="fontFamily.designers.length > 0">
-                                        by 
-                                        <span v-for="(designer, key) in fontFamily.designers"><a v-bind:href="designer.url">{{designer.name}}</a><span v-if="key < fontFamily.designers.length -1">, </span></span>
+                                    <p class="subtext" v-if="fontFamily.designers && fontFamily.designers.length > 0">
+                                        por 
+                                        <span v-for="(designer, key) in fontFamily.designers">
+                                            <a v-bind:href="designer.url" target="_blank" rel="noopener noreferrer">{{designer.name}}</a><span v-if="key < fontFamily.designers.length - 1">, </span>
+                                        </span>
+                                        &bull; {{fontFamily.fonts.length}} estilos disponíveis
                                     </p>
-                                    <br/>
-                                    <input type="checkbox" id="rawdlCheckbox" value="false" v-model="rawDownload" style="display:span;">
-                                    <label for="rawdlCheckbox">Download without processing</label>
+                                    <div style="margin-top: 10px;">
+                                        <input type="checkbox" id="rawdlCheckbox" value="false" v-model="rawDownload" style="display:inline-block; vertical-align: middle;">
+                                        <label for="rawdlCheckbox" style="display:inline-block; vertical-align: middle; margin-left: 6px; font-size: 1.4rem; color: #666;">Download sem processamento (direto / raw)</label>
+                                    </div>
+
+                                    <!-- Progress indicator when packaging zip -->
+                                    <div v-if="downloadProgress.active" style="margin-top: 12px; font-size: 1.4rem; color: #005DFF;">
+                                        <div style="display:flex; justify-content: space-between;">
+                                            <span>Processando e empacotando fontes: {{downloadProgress.current}} de {{downloadProgress.total}}</span>
+                                            <span>{{downloadProgress.percentage}}%</span>
+                                        </div>
+                                        <div class="progress-bar-wrap">
+                                            <div class="progress-bar-fill" :style="{width: downloadProgress.percentage + '%'}"></div>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="button_container">
-                                    <a class="button" v-on:click="downloadFonts(fontFamily.fonts, fontFamily.name)">Download All</a>
+                                    <a class="button" v-on:click="downloadAll()" style="font-weight: 600; min-width: 170px;">
+                                        <i class="icon ion-md-arrow-down" style="margin-right: 6px;"></i> Download All (.zip)
+                                    </a>
                                 </div>
                             </template>
                         </div>
                     </div>
                 </div>
 
+                <!-- Font Styles Panels -->
                 <div class="row" v-if="fontIsActive" v-for="(chunk, c_key) in getFontsInChunks(3)">
-                    <font-panel v-for="(font, f_key) in chunk" v-bind:key="(c_key * 3) + f_key" v-on:clickdownload="downloadFonts(font, fontFamily.name)" v-bind:fontname="font.name" v-bind:fontstyle="font.style" v-bind:fonturl="font.url" v-bind:sampletext="fontFamily.sampleText" v-bind:familyurl="font.familyUrl"></font-panel>
+                    <font-panel 
+                        v-for="(font, f_key) in chunk" 
+                        v-bind:key="(c_key * 3) + f_key" 
+                        v-on:clickdownload="downloadSingleFont(font)" 
+                        v-on:clickfamily="openFamily(font)"
+                        v-bind:fontname="font.name" 
+                        v-bind:fontstyle="font.style" 
+                        v-bind:fonturl="font.url" 
+                        v-bind:sampletext="fontFamily.sampleText" 
+                        v-bind:familyurl="font.familyUrl"
+                        v-bind:iscatalogitem="font.isCatalogItem"
+                        v-bind:provider="fontFamily.provider"></font-panel>
                 </div>
             </div>
         </article>
         <footer>
             <div class="grid">
                 <div class="row">
-                    <div class="column six offset-three">
-                        <p>
-                            Created by <a href="http://badnoise.net">Jeremy C.</a> Released under the <a href="http://www.wtfpl.net/">WTFPL</a>. Fork this on <a href="https://github.com/beemilkz/typerip">Github</a>.
-                        </p>
+                    <div class="column" style="text-align: center; font-size: 1.3rem; padding: 20px 0;">
+                        <p>TypeRip &mdash; Ferramenta de extração e conversão de fontes do Adobe Fonts e Google Fonts.</p>
                     </div>
                 </div>
             </div>

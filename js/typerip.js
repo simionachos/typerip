@@ -9,261 +9,313 @@ var TypeRip = {
         });
     },
 
-    handleRequest: function(url_, callback_){
-        if(!url_.toLowerCase().startsWith("http://") && !url_.toLowerCase().startsWith("https://")){
-            url_ = "http://" + url_;
+    handleRequest: function(input_, callback_){
+        if(!input_ || typeof input_ !== "string" || !input_.trim()){
+            callback_("error", "Por favor, digite ou cole uma URL ou o nome de uma fonte (Google Fonts ou Adobe Fonts).");
+            return;
         }
-        if(url_.indexOf("fonts.adobe.com/collections") != -1){
-            this.getFontCollection(url_, callback_);
-        }else{
-            this.getFontFamily(url_, callback_);
-        }
+        var query = input_.trim();
+
+        // 1. Use the unified server-side font resolution API
+        axios.get("/api/font?query=" + encodeURIComponent(query))
+        .then(function(response){
+            if(response.data && response.data.fonts && response.data.fonts.length > 0){
+                callback_("success", response.data);
+            }else{
+                callback_("error", "Nenhum estilo de fonte foi encontrado.");
+            }
+        })
+        .catch(function(err){
+            // Fallback for Adobe collection or client-side direct handling if needed
+            if(query.indexOf("fonts.adobe.com/collections") !== -1){
+                TypeRip.getFontCollection(query, callback_);
+            }else if(query.indexOf("fonts.adobe.com") !== -1){
+                TypeRip.getFontFamily(query, callback_);
+            }else{
+                var msg = (err.response && err.response.data) ? err.response.data : err.message;
+                callback_("error", msg || "Não foi possível carregar a fonte.");
+            }
+        });
     },
 
     getFontCollection: function(url_, callback_){
         this.fetchWithProxy(url_, function (response) {
-            let fontCollection = {
+            var fontCollection = {
+                provider: "adobe",
+                isCollection: true,
                 name: "",
                 designers: [],
                 fonts: []
+            };
+
+            var str = typeof response.data === "string" ? response.data : JSON.stringify(response.data);
+            var json_start = str.indexOf('{"fontpack":{"all_valid_slugs":'); 
+		    if(json_start === -1) {
+                callback_("error", "Resposta inesperada do Adobe Fonts. Verifique a URL.");
+                return;
             }
 
-            //search for the first part of the json
-            let json_start = response.data.toString().search('{"fontpack":{"all_valid_slugs":'); 
-		    if(json_start == -1) {
-                callback_("error", "Unexpected response from server. You either mistyped the URL, or the CORS proxy is down.")
-                return
+            var data = str.substring(json_start);
+            var json_end = data.indexOf('</script>'); 
+            if(json_end === -1) {
+                callback_("error", "Erro ao processar dados da coleção Adobe Fonts.");
+                return;
             }
 
-            //cut off everything before this point
-            let data = response.data.substring(json_start)
-
-            //find the stuff directly after the json, and use this as the anchor    
-            let json_end = data.search('</script>') 
-            if(json_end == -1) {
-                callback_("error", "Catastrophic Failure 002: Unexpected response. Check URL.")
-                return
-            }
-
-            //parse the json blob
-            let json;
+            var json;
             try {
                 json = JSON.parse(data.substring(0, json_end)); 
             }catch(e){
-                callback_("error",  "Catastrophic Failure 003: Unexpected response. Check URL.")
-                return
+                callback_("error", "Erro ao analisar dados da coleção Adobe Fonts.");
+                return;
             }
 
-            //find the default language of the first font in this collection.
-            fontCollection.defaultLanguage = json.fontpack.font_variations[0].default_language;
+            fontCollection.defaultLanguage = json.fontpack.font_variations[0].default_language || "pt";
+            fontCollection.sampleText = (json.textSampleData && json.textSampleData.textSamples[fontCollection.defaultLanguage]) 
+                ? json.textSampleData.textSamples[fontCollection.defaultLanguage]["list"] 
+                : "Todos os seres humanos nascem livres e iguais em dignidade e direitos."; 
+            fontCollection.name = json.fontpack.name;
 
-            //grab the sample text data for this language
-            fontCollection.sampleText = json.textSampleData.textSamples[fontCollection.defaultLanguage]["list"]; 
-            
-            //Font collection name
-            fontCollection.name = json.fontpack.name
-
-            //Find the contributor who curated this collection:
             fontCollection.designers.push({
-                "name": json.fontpack.contributor_credit,
+                "name": json.fontpack.contributor_credit || "Adobe Fonts",
                 "url": url_
-            })
+            });
             
-            //populate subfonts
-            for (let i = 0; i < json.fontpack.font_variations.length; i++) {
+            for (var i = 0; i < json.fontpack.font_variations.length; i++) {
+                var v = json.fontpack.font_variations[i];
                 fontCollection.fonts.push({
-                    url: "https://use.typekit.net/pf/tk/" + json.fontpack.font_variations[i].opaque_id + "/" + json.fontpack.font_variations[i].fvd + "/a?unicode=AAAAAQAAAAEAAAAB&features=ALL&v=3&ec_token=3bb2a6e53c9684ffdc9a9bf71d5b2a620e68abb153386c46ebe547292f11a96176a59ec4f0c7aacfef2663c08018dc100eedf850c284fb72392ba910777487b32ba21c08cc8c33d00bda49e7e2cc90baff01835518dde43e2e8d5ebf7b76545fc2687ab10bc2b0911a141f3cf7f04f3cac438a135f", 
-                    name: json.fontpack.font_variations[i].full_display_name,
-                    style: json.fontpack.font_variations[i].variation_name, 
-                    familyName: json.fontpack.font_variations[i].family.name,
-                    familyUrl: "https://fonts.adobe.com/fonts/" + json.fontpack.font_variations[i].family.slug
+                    url: "https://use.typekit.net/pf/tk/" + v.opaque_id + "/" + v.fvd + "/a?unicode=AAAAAQAAAAEAAAAB&features=ALL&v=3&ec_token=3bb2a6e53c9684ffdc9a9bf71d5b2a620e68abb153386c46ebe547292f11a96176a59ec4f0c7aacfef2663c08018dc100eedf850c284fb72392ba910777487b32ba21c08cc8c33d00bda49e7e2cc90baff01835518dde43e2e8d5ebf7b76545fc2687ab10bc2b0911a141f3cf7f04f3cac438a135f", 
+                    name: v.full_name,
+                    style: v.variation_name, 
+                    familyName: json.fontpack.name,
+                    familyUrl: "https://fonts.adobe.com/fonts/" + v.family_slug,
+                    isAdobe: true,
+                    provider: "adobe"
                 });
             }	
 
-            callback_("success", fontCollection)
+            callback_("success", fontCollection);
         }, function (error) {
-            callback_("error", error.message)
-        })
+            callback_("error", error.message);
+        });
     },
 
     getFontFamily: function(url_, callback_) {
         this.fetchWithProxy(url_, function (response) {
-            let fontFamily = {
+            var fontFamily = {
+                provider: "adobe",
                 name: "",
                 designers: [],
                 fonts: []
+            };
+
+            var str = typeof response.data === "string" ? response.data : JSON.stringify(response.data);
+            var json_start = str.indexOf('{"family":{"slug":'); 
+		    if(json_start === -1) {
+                callback_("error", "Não foi possível encontrar a família no Adobe Fonts.");
+                return;
             }
 
-            //search for the first part of the json
-            let json_start = response.data.toString().search('{"family":{"slug":"'); 
-		    if(json_start == -1) {
-                callback_("error", "Unexpected response from server. You either mistyped the URL, or the CORS proxy is down.")
-                return
+            var data = str.substring(json_start);
+            var json_end = data.indexOf('</script>'); 
+            if(json_end === -1) {
+                callback_("error", "Erro ao processar dados da família Adobe Fonts.");
+                return;
             }
 
-            //cut off everything before this point
-            let data = response.data.substring(json_start)
-
-            //find the stuff directly after the json, and use this as the anchor    
-            let json_end = data.search('</script>') 
-            if(json_end == -1) {
-                callback_("error", "Catastrophic Failure 002: Unexpected response. Check URL.")
-                return
-            }
-
-            //parse the json blob
-            let json;
+            var json;
             try {
-                json = JSON.parse(data.substring(0, json_end));
+                json = JSON.parse(data.substring(0, json_end)); 
             }catch(e){
-                callback_("error",  "Catastrophic Failure 003: Unexpected response. Check URL.")
-                return
+                callback_("error", "Erro ao analisar JSON da família.");
+                return;
             }
 
-            //find the default language of this font
-            fontFamily.defaultLanguage = json.family.display_font.default_language;
+            fontFamily.defaultLanguage = json.family.default_language || "pt";
+            fontFamily.sampleText = (json.textSampleData && json.textSampleData.textSamples[fontFamily.defaultLanguage]) 
+                ? json.textSampleData.textSamples[fontFamily.defaultLanguage]["list"] 
+                : "Todos os seres humanos nascem livres e iguais em dignidade e direitos."; 
+            fontFamily.name = json.family.name;
 
-            //grab the sample text data for this language
-            fontFamily.sampleText = json.textSampleData.textSamples[fontFamily.defaultLanguage]["list"]; 
-            
-            //family/foundry names
-            fontFamily.foundryName = json.family.foundry.name;
-            fontFamily.name = json.family.name
-            fontFamily.slug = json.family.slug
+            for (var i = 0; i < json.family.designers.length; i++) {
+                var designer = {
+                    "name": json.family.designers[i].name,
+                    "url": ""
+                };
 
-            //designers
-            for(let i = 0; i < json.family.designers.length; i++) {
-                let designer = {}
-                designer["name"] = json.family.designers[i].name
-
-                if(json.designer_info[json.family.designers[i].slug] != null){
-                    designer["url"] = "https://fonts.adobe.com" + json.designer_info[json.family.designers[i].slug].url
+                if(json.designer_info && json.designer_info[json.family.designers[i].slug]){
+                    designer["url"] = "https://fonts.adobe.com" + json.designer_info[json.family.designers[i].slug].url;
                 }
 
-                fontFamily.designers.push(designer)
+                fontFamily.designers.push(designer);
             }
 
-            //populate subfonts
-            for (let i = 0; i < json.family.fonts.length; i++) {
+            for (var j = 0; j < json.family.fonts.length; j++) {
+                var f = json.family.fonts[j];
                 fontFamily.fonts.push({
-                    //the magic is in the "unicode=AAAAAQAAAAEAAAAB&features=ALL&v=3"m which (apparently) requests the entire font set from the server :)
-                    url: "https://use.typekit.net/pf/tk/" + json.family.fonts[i].family.web_id + "/" + json.family.fonts[i].font.web.fvd + "/a?unicode=AAAAAQAAAAEAAAAB&features=ALL&v=3&ec_token=3bb2a6e53c9684ffdc9a9bf71d5b2a620e68abb153386c46ebe547292f11a96176a59ec4f0c7aacfef2663c08018dc100eedf850c284fb72392ba910777487b32ba21c08cc8c33d00bda49e7e2cc90baff01835518dde43e2e8d5ebf7b76545fc2687ab10bc2b0911a141f3cf7f04f3cac438a135f", 
-                    name: json.family.fonts[i].name,
-                    style: json.family.fonts[i].variation_name, 
+                    url: "https://use.typekit.net/pf/tk/" + f.family.web_id + "/" + f.font.web.fvd + "/a?unicode=AAAAAQAAAAEAAAAB&features=ALL&v=3&ec_token=3bb2a6e53c9684ffdc9a9bf71d5b2a620e68abb153386c46ebe547292f11a96176a59ec4f0c7aacfef2663c08018dc100eedf850c284fb72392ba910777487b32ba21c08cc8c33d00bda49e7e2cc90baff01835518dde43e2e8d5ebf7b76545fc2687ab10bc2b0911a141f3cf7f04f3cac438a135f", 
+                    name: f.name,
+                    style: f.variation_name, 
                     familyName: fontFamily.name,
-                    familyUrl: "https://fonts.adobe.com/fonts/" + json.family.slug
+                    familyUrl: "https://fonts.adobe.com/fonts/" + json.family.slug,
+                    isAdobe: true,
+                    provider: "adobe"
                 });
             }	
-            callback_("success", fontFamily)
+            callback_("success", fontFamily);
         }, function (error) {
-            callback_("error", error.message)
-        })
+            callback_("error", error.message);
+        });
     },
-    downloadFonts: function(fonts_, zipFileName_, rawDownload_){
-        fontList = []
-        if(Array.isArray(fonts_)){ //more than one font
+
+    downloadFonts: function(fonts_, zipFileName_, rawDownload_, onProgress_){
+        var fontList = [];
+        if(Array.isArray(fonts_)){
             fontList = fonts_;
-        }else{ //only one font
+        }else{
             fontList = [fonts_];
-            zipFileName_ = fonts_.name + " " + fonts_.style
+            zipFileName_ = fonts_.name || (fonts_.familyName + " " + fonts_.style);
         }
 
-        //create a ZIP file
-        zip = new JSZip();
+        if(fontList.length === 0){
+            return;
+        }
 
-        fontProcessCounter = 0;
+        var zip = new JSZip();
+        var fontProcessCounter = 0;
+        var totalFonts = fontList.length;
 
-        //go through each instance of fond information in fontList, download them from the adobe server, reconstruct them with OpenType and zip them.
-        //Once n fonts have been zipped, download the zip file, where n is the number of fonts in fontList.
-        //There's probably a better way to do this with promises or something.
+        if(onProgress_){
+            onProgress_(0, totalFonts);
+        }
+
         for(var i = 0; i < fontList.length; i++) {
-            var fontData = this.getAndRepairFont(fontList[i], rawDownload_, (font, fontMeta) =>{
-                zip.file(fontMeta.name + ".ttf", font);
-                fontProcessCounter++;
-                if(fontProcessCounter == fontList.length){
-                    zip.generateAsync({type:"blob"})
-                    .then(function(content) {
-                        saveAs(content, zipFileName_ + ".zip");
-                    });
-                }
-            });
+            (function(fontItem){
+                TypeRip.getAndRepairFont(fontItem, rawDownload_, function(fontBuffer, fontMeta){
+                    fontProcessCounter++;
+                    if(onProgress_){
+                        onProgress_(fontProcessCounter, totalFonts);
+                    }
+
+                    if(fontBuffer){
+                        var safeName = (fontMeta.name || fontMeta.style || "font").replace(/[/\\?%*:|"<>]/g, "_");
+                        
+                        // Detect extension from buffer bytes: OTTO for .otf, otherwise .ttf
+                        var ext = ".ttf";
+                        try {
+                            var view = new Uint8Array(fontBuffer);
+                            if(view[0] === 0x4F && view[1] === 0x54 && view[2] === 0x54 && view[3] === 0x4F){
+                                ext = ".otf";
+                            }
+                        } catch(e) {}
+
+                        zip.file(safeName + ext, fontBuffer);
+                    }
+
+                    if(fontProcessCounter === totalFonts){
+                        zip.generateAsync({type:"blob"})
+                        .then(function(content) {
+                            var safeZipName = (zipFileName_ || "fonts").replace(/[/\\?%*:|"<>]/g, "_");
+                            saveAs(content, safeZipName + ".zip");
+                            if(onProgress_){
+                                onProgress_(totalFonts, totalFonts, true);
+                            }
+                        });
+                    }
+                });
+            })(fontList[i]);
         }
     },
 
     getAndRepairFont: function(font_, rawDownload_, callback_) {
-        if(rawDownload_){
-            axios.get(font_.url, {responseType: 'arraybuffer'}).then(function (response) {
-                callback_(response.data, font_);
-            });
-
-        }else{
-            opentype.load(font_.url, function(error_, fontData_) {
-                if (error_) {
-                    return "Error: Font failed to load."
-                }else{
-
-                    //Rebuild the glyph data structure. This repairs any encoding issues.
-                    let rebuiltGlyphs = []
-
-                    //for every glyph in the parsed font data:
-                    for(let i = 0; i < fontData_.glyphs.length; i++) {
-                        //Create a structure to hold the new glyph data
-                        let glyphData = {};
-
-                        let glyphFields = ['name', 'unicode', 'unicodes', 'path', 'index', 'advanceWidth', 'leftSideBearing']
-
-                        glyphFields.forEach(field => {
-                            if(fontData_.glyphs.glyphs[i][field] != null) {
-                                glyphData[field] = fontData_.glyphs.glyphs[i][field]
-                            }
-                        });
-
-                        //HOTFIX #1     If the advanceWidth of a glyph is NaN, opentype will crash.
-                        //SOLUTION:     Ensure advanceWidth has non-NaN AND non-0 value
-                        if(glyphData.advanceWidth == null || isNaN(glyphData.advanceWidth)){
-                            let newAdvanceWidth = Math.floor(fontData_.glyphs.glyphs[i].getBoundingBox().x2);
-                            if(newAdvanceWidth == 0){
-                                newAdvanceWidth = fontData_.glyphs.glyphs[0].getBoundingBox().x2;
-                            }
-                            glyphData.advanceWidth = newAdvanceWidth;
-                        }
-
-                        //Rebuild the new glyph.
-                        let rebuiltGlyph = new opentype.Glyph(glyphData);
-
-                        //HOTFIX #2:    If fields with a value of 0 are used in the constructor, opentype will simply not set them in the object.
-                        //SOLUTION:     Manually go through every 0 field that should have been set in the constructor, and set it. ( https://github.com/opentypejs/opentype.js/issues/375 )
-                        glyphFields.forEach(field => {
-                            if(glyphData[field] != null && glyphData[field] == 0) {
-                                rebuiltGlyph[field] = 0
-                            }
-                        })
-
-                        //push the rebuilt glyph to an array.
-                        rebuiltGlyphs.push(rebuiltGlyph)
-                    }
-                    
-                    //create a structure of font data with fields from the parsed font.
-                    let newFontData = {
-                        familyName: font_.familyName,
-                        styleName: font_.style,
-                        glyphs: rebuiltGlyphs
-                    }
-
-                    //extract as much available data out of the existing font data and copy it over to the new font:
-                    let optionalFontDataFields = ['defaultWidthX', 'nominalWidthX', 'unitsPerEm', 'ascender', 'descender' ]
-                    optionalFontDataFields.forEach(field => {
-                        if(fontData_[field] != null) {
-                            newFontData[field] = fontData_[field]
-                        }
-                    });
-
-                    //rebuild and download the font.
-                    let newFont = new opentype.Font(newFontData)
-                    callback_(newFont.toArrayBuffer(), font_);
-                }
+        var fetchBuffer = function(url, done) {
+            axios.get(url, { responseType: 'arraybuffer' })
+            .then(function(res) {
+                done(res.data);
             })
-        }
-    }
-}
+            .catch(function() {
+                axios.get("/api/proxy?url=" + encodeURIComponent(url), { responseType: 'arraybuffer' })
+                .then(function(proxyRes) {
+                    done(proxyRes.data);
+                })
+                .catch(function(err) {
+                    console.error("Fetch failed for font:", font_.name, err);
+                    done(null);
+                });
+            });
+        };
 
+        // If raw download is requested or if it is already a complete Google Font TTF:
+        if(rawDownload_ || font_.isGoogle || font_.raw){
+            fetchBuffer(font_.url, function(buf) {
+                callback_(buf, font_);
+            });
+            return;
+        }
+
+        // For Adobe Fonts: fetch buffer and repair using OpenType.js
+        fetchBuffer(font_.url, function(rawBuf) {
+            if(!rawBuf){
+                callback_(null, font_);
+                return;
+            }
+
+            try {
+                if(typeof opentype === "undefined" || !opentype.parse){
+                    // Fallback to raw buffer if opentype is missing
+                    callback_(rawBuf, font_);
+                    return;
+                }
+
+                var fontData_ = opentype.parse(rawBuf);
+
+                var unitsPerEm = fontData_.unitsPerEm || (fontData_.tables.head && fontData_.tables.head.unitsPerEm) || 1000;
+                var ascender = fontData_.ascender || (fontData_.tables.hhea && fontData_.tables.hhea.ascender) || 800;
+                var descender = fontData_.descender || (fontData_.tables.hhea && fontData_.tables.hhea.descender) || -200;
+                if (descender >= 0) {
+                    descender = -descender || -200;
+                }
+
+                var rebuiltGlyphs = [];
+                for(var i = 0; i < fontData_.glyphs.length; i++) {
+                    var glyph = fontData_.glyphs.get(i);
+                    var adv = (typeof glyph.advanceWidth === "number" && !isNaN(glyph.advanceWidth)) 
+                        ? glyph.advanceWidth 
+                        : (glyph.getBoundingBox().x2 || 500);
+                    var lsb = (typeof glyph.leftSideBearing === "number" && !isNaN(glyph.leftSideBearing)) 
+                        ? glyph.leftSideBearing 
+                        : 0;
+
+                    var rebuiltGlyph = new opentype.Glyph({
+                        name: glyph.name,
+                        unicode: glyph.unicode,
+                        unicodes: glyph.unicodes,
+                        path: glyph.path,
+                        index: glyph.index !== undefined ? glyph.index : i,
+                        advanceWidth: adv,
+                        leftSideBearing: lsb
+                    });
+                    rebuiltGlyph.advanceWidth = adv;
+                    rebuiltGlyph.leftSideBearing = lsb;
+                    rebuiltGlyphs.push(rebuiltGlyph);
+                }
+
+                var newFontData = {
+                    familyName: font_.familyName || font_.name,
+                    styleName: font_.style || "Regular",
+                    unitsPerEm: unitsPerEm,
+                    ascender: ascender,
+                    descender: descender,
+                    glyphs: rebuiltGlyphs
+                };
+
+                var newFont = new opentype.Font(newFontData);
+                var repairedBuf = newFont.toArrayBuffer();
+                callback_(repairedBuf, font_);
+            } catch(repairErr) {
+                console.warn("OpenType reconstruction failed, downloading clean raw buffer:", repairErr);
+                callback_(rawBuf, font_);
+            }
+        });
+    }
+};
