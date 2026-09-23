@@ -1,0 +1,8 @@
+{
+  "name": "TypeRip",
+  "description": "Adobe Fonts font family ripper and downloader",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

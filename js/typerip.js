@@ -1,4 +1,14 @@
 var TypeRip = {
+    fetchWithProxy: function(url, onSuccess, onError) {
+        axios.get("/api/proxy?url=" + encodeURIComponent(url))
+        .then(onSuccess)
+        .catch(function() {
+            axios.get("https://api.allorigins.win/raw?url=" + encodeURIComponent(url))
+            .then(onSuccess)
+            .catch(onError);
+        });
+    },
+
     handleRequest: function(url_, callback_){
         if(!url_.toLowerCase().startsWith("http://") && !url_.toLowerCase().startsWith("https://")){
             url_ = "http://" + url_;
@@ -11,8 +21,7 @@ var TypeRip = {
     },
 
     getFontCollection: function(url_, callback_){
-        axios.get("https://api.allorigins.win/raw?url=" + url_)
-        .then(function (response) {
+        this.fetchWithProxy(url_, function (response) {
             let fontCollection = {
                 name: "",
                 designers: [],
@@ -72,15 +81,13 @@ var TypeRip = {
             }	
 
             callback_("success", fontCollection)
-        })
-        .catch(function (error) {
+        }, function (error) {
             callback_("error", error.message)
         })
     },
 
     getFontFamily: function(url_, callback_) {
-        axios.get("https://api.allorigins.win/raw?url=" + url_)
-        .then(function (response) {
+        this.fetchWithProxy(url_, function (response) {
             let fontFamily = {
                 name: "",
                 designers: [],
@@ -148,8 +155,7 @@ var TypeRip = {
                 });
             }	
             callback_("success", fontFamily)
-        })
-        .catch(function (error) {
+        }, function (error) {
             callback_("error", error.message)
         })
     },
